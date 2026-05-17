@@ -25,7 +25,7 @@ jobs:
       - name: Install Tools
         run: pip install requests aiohttp
 
-      - name: Dynamic Precedence Patch and Run
+      - name: Ultimate Precedence Patch and Run
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -33,13 +33,15 @@ jobs:
           cat << 'EOF' > patch.py
           import os
           import json
+          import urllib.request
+
+          print("[Patch] Initializing rule priority override...")
 
           def get_free_precedence():
               account_id = os.environ.get("CLOUDFLARE_ACCOUNT_ID")
               token = os.environ.get("CLOUDFLARE_API_TOKEN")
               if not account_id or not token:
                   return None
-              import urllib.request
               url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/gateway/rules"
               req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
               try:
@@ -56,19 +58,34 @@ jobs:
               return None
 
           try:
-              import aiohttp
-              orig_req = aiohttp.ClientSession._request
-              async def new_req(self, method, url, *args, **kwargs):
+              import requests
+              orig_session_request = requests.Session.request
+              def new_session_request(self, method, url, *args, **kwargs):
                   if "gateway/rules" in str(url) and method.upper() == "POST":
                       if "json" in kwargs and isinstance(kwargs["json"], dict):
                           fp = get_free_precedence()
                           if fp:
-                              print(f"[Patch] Dynamically forcing rule precedence to open slot: {fp}")
+                              print(f"[Patch Requests] Forcing precedence to open slot: {fp}")
                               kwargs["json"]["precedence"] = fp
-                  return await orig_req(self, method, url, *args, **kwargs)
-              aiohttp.ClientSession._request = new_req
-          except Exception:
-              pass
+                  return orig_session_request(self, method, url, *args, **kwargs)
+              requests.Session.request = new_session_request
+          except Exception as e:
+              print(f"[Patch Warning] Failed to hook requests: {e}")
+
+          try:
+              import aiohttp
+              orig_aiohttp_request = aiohttp.ClientSession._request
+              async def new_aiohttp_request(self, method, url, *args, **kwargs):
+                  if "gateway/rules" in str(url) and method.upper() == "POST":
+                      if "json" in kwargs and isinstance(kwargs["json"], dict):
+                          fp = get_free_precedence()
+                          if fp:
+                              print(f"[Patch Aiohttp] Forcing precedence to open slot: {fp}")
+                              kwargs["json"]["precedence"] = fp
+                  return await orig_aiohttp_request(self, method, url, *args, **kwargs)
+              aiohttp.ClientSession._request = new_aiohttp_request
+          except Exception as e:
+              print(f"[Patch Warning] Failed to hook aiohttp: {e}")
           EOF
           cat update_gateway.py >> patch.py
           mv patch.py update_gateway.py
