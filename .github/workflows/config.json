@@ -1,0 +1,12 @@
+{
+  "blocklists": [
+    {
+      "name": "Hagezi Pro++",
+      "url": "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/pro.plus-onlydomains.txt"
+    }
+  ],
+  "rule_name": "Hagezi Pro++ Adblock",
+  "rule_precedence": 10000,
+  "fresh_start": false,
+  "check_versions": true
+}
