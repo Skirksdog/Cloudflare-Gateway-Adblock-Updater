@@ -11,11 +11,17 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout Code From Source
+      - name: Checkout Your Config
+        uses: actions/checkout@v4
+        with:
+          path: 'my-repo'
+
+      - name: Checkout Source Code
         uses: actions/checkout@v4
         with:
           repository: 'SeriousHoax/Cloudflare-Gateway-Adblock-Updater'
           ref: 'main'
+          path: 'src'
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -25,8 +31,11 @@ jobs:
       - name: Install Tools
         run: pip install requests aiohttp
 
-      - name: Run Updater
+      - name: Move Config and Run
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: python update_gateway.py
+        run: |
+          cp my-repo/config.json src/config.json
+          cd src
+          python update_gateway.py
