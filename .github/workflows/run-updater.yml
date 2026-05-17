@@ -11,10 +11,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout Repository
+      - name: Checkout Code From Source
         uses: actions/checkout@v4
         with:
-          ref: main
+          repository: 'SeriousHoax/Cloudflare-Gateway-Adblock-Updater'
+          ref: 'main'
 
       - name: Set up Python
         uses: actions/setup-python@v5
