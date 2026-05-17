@@ -25,31 +25,50 @@ jobs:
       - name: Install Tools
         run: pip install requests aiohttp
 
-      - name: Patch Precedence and Run
+      - name: Dynamic Precedence Patch and Run
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           cat << 'EOF' > patch.py
+          import os
           import json
-          orig_dumps = json.dumps
-          def fix_precedence(obj):
-              if isinstance(obj, dict):
-                  if "precedence" in obj:
-                      obj["precedence"] = 10000
-                  for k, v in obj.items():
-                      fix_precedence(v)
-              elif isinstance(obj, list):
-                  for item in obj:
-                      fix_precedence(item)
 
-          def custom_dumps(obj, *args, **kwargs):
+          def get_free_precedence():
+              account_id = os.environ.get("CLOUDFLARE_ACCOUNT_ID")
+              token = os.environ.get("CLOUDFLARE_API_TOKEN")
+              if not account_id or not token:
+                  return None
+              import urllib.request
+              url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/gateway/rules"
+              req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
               try:
-                  fix_precedence(obj)
-              except Exception:
-                  pass
-              return orig_dumps(obj, *args, **kwargs)
-          json.dumps = custom_dumps
+                  with urllib.request.urlopen(req) as response:
+                      res = json.loads(response.read().decode())
+                      if res.get("success") and isinstance(res.get("result"), list):
+                          existing = [r.get("precedence") for r in res["result"] if r.get("precedence") is not None]
+                          p = 1
+                          while p in existing:
+                              p += 1
+                          return p
+              except Exception as e:
+                  print(f"[Patch Error] Could not calculate vacancy: {e}")
+              return None
+
+          try:
+              import aiohttp
+              orig_req = aiohttp.ClientSession._request
+              async def new_req(self, method, url, *args, **kwargs):
+                  if "gateway/rules" in str(url) and method.upper() == "POST":
+                      if "json" in kwargs and isinstance(kwargs["json"], dict):
+                          fp = get_free_precedence()
+                          if fp:
+                              print(f"[Patch] Dynamically forcing rule precedence to open slot: {fp}")
+                              kwargs["json"]["precedence"] = fp
+                  return await orig_req(self, method, url, *args, **kwargs)
+              aiohttp.ClientSession._request = new_req
+          except Exception:
+              pass
           EOF
           cat update_gateway.py >> patch.py
           mv patch.py update_gateway.py
