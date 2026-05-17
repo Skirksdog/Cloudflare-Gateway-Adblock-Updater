@@ -11,17 +11,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout Your Config
-        uses: actions/checkout@v4
-        with:
-          path: 'my-repo'
-
       - name: Checkout Source Code
         uses: actions/checkout@v4
         with:
           repository: 'SeriousHoax/Cloudflare-Gateway-Adblock-Updater'
           ref: 'main'
-          path: 'src'
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -31,11 +25,23 @@ jobs:
       - name: Install Tools
         run: pip install requests aiohttp
 
-      - name: Move Config and Run
+      - name: Create Config and Run
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          cp my-repo/config.json src/config.json
-          cd src
+          cat << 'EOF' > config.json
+          {
+            "blocklists": [
+              {
+                "name": "Hagezi Pro++",
+                "url": "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/pro.plus-onlydomains.txt"
+              }
+            ],
+            "rule_name": "Hagezi Pro++ Adblock",
+            "rule_precedence": 10000,
+            "fresh_start": false,
+            "check_versions": true
+          }
+          EOF
           python update_gateway.py
